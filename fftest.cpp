@@ -136,7 +136,7 @@ int create(void *p, int len)
 
   const char *file = "test.avi";
   AVCodecID codec_id = AV_CODEC_ID_H264;
-//  CodecID codec_id = CODEC_ID_MPEG4;
+//  AVCodecID codec_id = AV_CODEC_ID_MPEG4;
   int br = 1000000;
   int w = 828;
   int h = 1792;
@@ -182,42 +182,29 @@ int create(void *p, int len)
 
 #include <iostream>
 #include <windows.h>
+#include <tlhelp32.h>
+
+uintptr_t getModule(DWORD procId, const char *modName)
+{
+  HANDLE hModule = CreateToolhelp32Snapshot(TH32CS_SNAPALL, procId);
+  MODULEENTRY32 mEntry;
+  mEntry.dwSize = sizeof(mEntry);
+
+  do {
+    if (!strcmp(mEntry.szModule, modName)) {
+      CloseHandle(hModule);
+      return (DWORD) mEntry.hModule;
+    }
+  } while (Module32Next(hModule, &mEntry));
+  return 0;
+}
 
 #include <cstdio>
-//#include <thread>
+#include <thread>
 #include <fstream>
 #include <vector>
 #include <algorithm>
 #include "h264-bitstream/h264_stream.h"
-
-//uint8_t *ttt(unsigned char *data, int *data_len, int frameType)
-//{
-//
-//}
-
-std::vector<std::string> split_string(std::string_view content, std::string_view delimeter)
-{
-  std::vector<std::string> result;
-  auto prev_pos = content.begin();
-  auto next_pos = std::search(prev_pos, content.end(),
-                              delimeter.begin(), delimeter.end());
-  while (next_pos != content.end()) {
-    result.emplace_back(prev_pos, next_pos);
-    prev_pos = next_pos + delimeter.size();
-    next_pos = std::search(prev_pos, content.end(),
-                           delimeter.begin(), delimeter.end());
-  }
-
-  if (prev_pos != content.end()) {
-    result.emplace_back(prev_pos, content.end());
-  }
-  return result;
-}
-
-int *char_to_pointer(std::string input)
-{
-  return (int *) std::stoul(input, nullptr, 16);
-}
 
 #ifdef __cplusplus
 extern "C"
@@ -229,6 +216,8 @@ int main(int argc, char *argv[])
 
   bool b = true;
 
+  const std::string entryName = "rpiplay.exe";
+
   HWND hWnd = FindWindow(0, TEXT("C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\rpiplay.exe"));
   if (hWnd == 0) {
     std::cerr << "Cannot find window." << std::endl;
@@ -237,37 +226,46 @@ int main(int argc, char *argv[])
     GetWindowThreadProcessId(hWnd, &pId);
     HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pId);
 
-    int size = -1;
-    unsigned char *data = (unsigned char *) malloc(200000);
-    int frameType;
-
-    SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0;
-
     if (hProc) {
+//      auto entryPoint = getModule(pId, entryName.c_str());
+
+      int size = -1;
+      uint8_t *data = (uint8_t *) malloc(200000);
+      int frameType;
+
+      SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0;
+
+      uint8_t *modified_data = (uint8_t *) malloc(29 * 2);
+      h264_stream_t *h = h264_new();
+
+      if (!modified_data || !h)
+        std::cerr << "PEZDA!" << std::endl;
+
+      auto start = std::chrono::steady_clock::now();
       while (b) {
-        if (ReadProcessMemory(hProc, (LPVOID) 0x7d1a00, &size, 4, &size_bytes_read)
+//        if (std::chrono::steady_clock::now() - start > std::chrono::seconds(10))
+//          break;
+
+        if (ReadProcessMemory(hProc, (LPVOID) (0xf91a00), &size, 4, &size_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
           if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
         }
 
-        if (ReadProcessMemory(hProc, (LPVOID) 0x27b0048, data, size, &data_bytes_read)
-            || GetLastError() == ERROR_PARTIAL_COPY) {
-          if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
+        if (size > 0) {
+          if (ReadProcessMemory(hProc, (LPVOID) (0xe50048), data, size, &data_bytes_read)
+              || GetLastError() == ERROR_PARTIAL_COPY) {
+            if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
+          }
         }
 
-        if (ReadProcessMemory(hProc, (LPVOID) 0x7d1a10, &frameType, 4, &frame_type_bytes_read)
+        if (ReadProcessMemory(hProc, (LPVOID) (0xf91a10), &frameType, 4, &frame_type_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
           if (frame_type_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
         }
 
         if (size > 0) {
           if (frameType == 0) {
-            unsigned char* modified_data = (unsigned char*)malloc(size * 2);
             int sps_start, sps_end;
-            h264_stream_t *h = h264_new();
-
-            if (!h)
-              continue;
 
             int sps_size = find_nal_unit(data, size, &sps_start, &sps_end);
             int pps_size = size - 8 - sps_size;
@@ -300,7 +298,6 @@ int main(int argc, char *argv[])
             write_frame(data, size);
         }
       }
-
     } else {
       std::cerr << "Couldn't open process " << pId << ": " << GetLastError() << std::endl;
     }
@@ -312,42 +309,3 @@ int main(int argc, char *argv[])
     b = false;
   }
 }
-//int main(int argc, char **argv)
-//{
-//  int f = 0, sz = 0;
-//  char fname[256] = {0};
-//  char buf[128 * 1024];
-//
-//  av_log_set_level(AV_LOG_ERROR);
-//  av_register_all();
-//
-//  do {
-//    // Raw frames in v0.raw, v1.raw, v2.raw, ...
-////      sprintf( fname, "rawvideo/v%lu.raw", f++ );
-//    sprintf(fname, "frames/frame%lu.bin", f++);
-//    printf("%s\n", fname);
-//
-//    FILE *fd = fopen(fname, "rb");
-//    if (!fd)
-//      sz = 0;
-//    else {
-//      sz = fread(buf, 1, sizeof(buf) - AV_INPUT_BUFFER_PADDING_SIZE, fd);
-//      if (0 < sz) {
-//        memset(&buf[sz], 0, AV_INPUT_BUFFER_PADDING_SIZE);
-//
-//        if (!fc)
-//          create(buf, sz);
-//
-//        if (fc)
-//          write_frame(buf, sz);
-//
-//      } // end if
-//
-//      fclose(fd);
-//
-//    } // end else
-//
-//  } while (0 < sz);
-//
-//  destroy();
-//}

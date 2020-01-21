@@ -11,7 +11,7 @@ link_directories("C:/SDL2-2.0.10/i686-w64-mingw32/lib")
 
 add_subdirectory(h264-bitstream)
 
-add_executable(airplayer #[[main.cpp]] fftest.cpp)
+add_executable(airplayer #[[main.cpp]] fftest.cpp H264_Decoder.cpp H264_Stream_Decoder.cpp H264_Decoder.h tinylib.h)
 target_link_libraries(airplayer avcodec avutil avformat swscale h264-bitstream)
 
 #add_executable(player player.cpp)
