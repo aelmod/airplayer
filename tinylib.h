@@ -1,5 +1,7 @@
+#pragma once
+
 #include <cstdint>
-#include <ntdef.h>
+#include <windows.h>
 #include <profileapi.h>
 
 extern uint64_t rx_hrtime();
