@@ -115,7 +115,6 @@ void H264_Decoder::decodeFrame(uint8_t *data, int size, bool &first_frame)
 {
 
   AVPacket pkt;
-  int got_picture = 0;
   int len = 0;
 
   av_init_packet(&pkt);
@@ -123,14 +122,19 @@ void H264_Decoder::decodeFrame(uint8_t *data, int size, bool &first_frame)
   pkt.data = data;
   pkt.size = size;
 
-  len = avcodec_decode_video2(codec_context, picture, &got_picture, &pkt);
+  len = avcodec_send_packet(codec_context, &pkt);
+
   if (len < 0) {
-    printf("Error while decoding a frame.\n");
+    printf("avcodec_send_packet error: %d\n", len);
   }
 
-  if (got_picture == 0) {
-    return;
+  len = avcodec_receive_frame(codec_context, picture);
+
+  if (len < 0) {
+    printf("avcodec_receive_frame error: %d\n", len);
   }
+
+//  RTC_DCHECK_EQ(picture->reordered_opaque, frame_timestamp_us); //TODO: implement me
 
   ++frame;
 
@@ -141,20 +145,21 @@ void H264_Decoder::decodeFrame(uint8_t *data, int size, bool &first_frame)
 
 int H264_Decoder::readBuffer()
 {
-  int bytes_read = 0;
+  int bytes_read = rawDataSize;
 
-  if (rawDataSize < 0) return 0;
-
-  if (rawDataSize <= H264_INBUF_SIZE) {
-    bytes_read = rawDataSize;
     memcpy(inbuf, rawData, rawDataSize);
-  } else {
-    if (rawDataSize > H264_INBUF_SIZE)
-      rawDataSize = rawDataSize - H264_INBUF_SIZE;
-
-//    bytes_read = H264_INBUF_SIZE;
-    memcpy(inbuf, rawData + H264_INBUF_SIZE, rawDataSize);
-  }
+//  if (rawDataSize < 0) return 0;
+//
+//  if (rawDataSize <= H264_INBUF_SIZE) {
+//    bytes_read = rawDataSize;
+//    memcpy(inbuf, rawData, rawDataSize);
+//  } else {
+//    if (rawDataSize > H264_INBUF_SIZE)
+//      rawDataSize = rawDataSize - H264_INBUF_SIZE;
+//
+////    bytes_read = H264_INBUF_SIZE;
+//    memcpy(inbuf, rawData + H264_INBUF_SIZE, rawDataSize);
+//  }
 
   if (bytes_read) {
     std::copy(inbuf, inbuf + bytes_read, std::back_inserter(buffer));

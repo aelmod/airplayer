@@ -52,7 +52,8 @@ public:
   AVCodecContext* codec_context;                                                         /* the context; keeps generic state */
   AVCodecParserContext* parser;                                                          /* parser that is used to decode the h264 bitstream */
   AVFrame* picture;                                                                      /* will contain a decoded picture */
-  uint8_t inbuf[H264_INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];                         /* used to read chunks from the file */
+//  uint8_t inbuf[H264_INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];                         /* used to read chunks from the file */
+  uint8_t inbuf[200000];                         /* used to read chunks from the file */
   int frame;                                                                             /* the number of decoded frames */
   h264_decoder_callback cb_frame;                                                        /* the callback function which will receive the frame/packet data */
   void* cb_user;                                                                         /* the void* with user data that is passed into the set callback */

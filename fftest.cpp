@@ -26,18 +26,36 @@ extern "C"
 void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx);
 void sdlInit(AVCodecContext *pCodecCtx);
 
+int *char_to_pointer(std::string input)
+{
+    return (int *) std::stoul(input, nullptr, 16);
+}
+
 #ifdef __cplusplus
 extern "C"
 #endif
 int main(int argc, char *argv[])
 {
 
+  std::ifstream infile("C:\\Users\\Zheka\\Downloads\\cmake-build-release\\pointers.txt"); //TODO: gowno ebanoe
+
+  std::string sizePtrStr;
+  std::string dataPtrStr;
+  std::string dataTypePtrStr;
+  std::getline(infile, sizePtrStr);
+  std::getline(infile, dataPtrStr);
+  std::getline(infile, dataTypePtrStr);
+
+  int *sizePtr = char_to_pointer(sizePtrStr);
+  int *dataPtr = char_to_pointer(dataPtrStr);
+  int *dataTypePtr = char_to_pointer(dataTypePtrStr);
+
   bool b = true;
   const std::string entryName = "rpiplay.exe";
 
   auto *pDecoder = new H264_Decoder(render, nullptr);
 
-  HWND hWnd = FindWindow(0, TEXT("C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\rpiplay.exe"));
+  HWND hWnd = FindWindow(0, TEXT("C:\\Users\\Zheka\\Downloads\\cmake-build-release\\rpiplay.exe"));
   if (hWnd == 0) {
     std::cerr << "Cannot find window." << std::endl;
   } else {
@@ -47,15 +65,14 @@ int main(int argc, char *argv[])
 
     if (hProc) {
       int size = -1;
-      uint8_t *data = (uint8_t *) malloc(200000);
+      auto *data = (uint8_t *) malloc(200000);
       int frameType;
 
       SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0;
 
       h264_stream_t *h = h264_new();
 
-      if (!h)
-        std::cerr << "PEZDA!" << std::endl;
+      if (!h) std::cerr << "PEZDA!" << std::endl;
 
       pDecoder->load(60);
 
@@ -65,19 +82,19 @@ int main(int argc, char *argv[])
       uint8_t *modified_data = nullptr;
 
       while (b) {
-        if (ReadProcessMemory(hProc, (LPVOID) (0x7a1a00), &size, 4, &size_bytes_read)
+        if (ReadProcessMemory(hProc, (LPVOID) (sizePtr), &size, 4, &size_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
           if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
         }
 
         if (size > 0) {
-          if (ReadProcessMemory(hProc, (LPVOID) (0x26c0048), data, size, &data_bytes_read)
+          if (ReadProcessMemory(hProc, (LPVOID) (dataPtr), data, size, &data_bytes_read)
               || GetLastError() == ERROR_PARTIAL_COPY) {
             if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
           }
         }
 
-        if (ReadProcessMemory(hProc, (LPVOID) (0x7a1a10), &frameType, 4, &frame_type_bytes_read)
+        if (ReadProcessMemory(hProc, (LPVOID) (dataTypePtr), &frameType, 4, &frame_type_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
           if (frame_type_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
         }
@@ -136,7 +153,19 @@ int main(int argc, char *argv[])
           }
 
           bool tmp = false;
-          pDecoder->readFrame(data, size, tmp);
+            pDecoder->readFrame(data, size, tmp);
+//            int tmpSize = modifiedDataSize + size;
+//
+//            auto *combined = new unsigned char[tmpSize];
+//
+//            memcpy(combined, modified_data, modifiedDataSize);
+//            memcpy(combined + modifiedDataSize, data, size);
+
+//          pDecoder->readFrame(combined, tmpSize, tmp);
+//
+//          free(combined);
+
+          Sleep(17);
         }
       }
     } else {
@@ -241,5 +270,6 @@ void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCt
   SDL_RenderPresent(sdlRenderer);
   SDL_PollEvent(&event);
 
-  SDL_DestroyTexture(sdlTexture);
+//    av_free_packet(&pkt);
+//  SDL_DestroyTexture(sdlTexture);
 }
