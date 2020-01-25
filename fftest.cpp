@@ -28,7 +28,7 @@ void sdlInit(AVCodecContext *pCodecCtx);
 
 int *char_to_pointer(std::string input)
 {
-    return (int *) std::stoul(input, nullptr, 16);
+  return (int *) std::stoul(input, nullptr, 16);
 }
 
 #ifdef __cplusplus
@@ -37,25 +37,29 @@ extern "C"
 int main(int argc, char *argv[])
 {
 
-  std::ifstream infile("C:\\Users\\Zheka\\Downloads\\cmake-build-release\\pointers.txt"); //TODO: gowno ebanoe
+  std::ifstream infile(
+      "C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\pointers.txt"); //TODO: gowno ebanoe
 
   std::string sizePtrStr;
   std::string dataPtrStr;
   std::string dataTypePtrStr;
+  std::string sharedPTSStr;
   std::getline(infile, sizePtrStr);
   std::getline(infile, dataPtrStr);
   std::getline(infile, dataTypePtrStr);
+  std::getline(infile, sharedPTSStr);
 
   int *sizePtr = char_to_pointer(sizePtrStr);
   int *dataPtr = char_to_pointer(dataPtrStr);
   int *dataTypePtr = char_to_pointer(dataTypePtrStr);
+  int *PTSPtr = char_to_pointer(sharedPTSStr);
 
   bool b = true;
   const std::string entryName = "rpiplay.exe";
 
   auto *pDecoder = new H264_Decoder(render, nullptr);
 
-  HWND hWnd = FindWindow(0, TEXT("C:\\Users\\Zheka\\Downloads\\cmake-build-release\\rpiplay.exe"));
+  HWND hWnd = FindWindow(0, TEXT("C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\rpiplay.exe"));
   if (hWnd == 0) {
     std::cerr << "Cannot find window." << std::endl;
   } else {
@@ -67,8 +71,9 @@ int main(int argc, char *argv[])
       int size = -1;
       auto *data = (uint8_t *) malloc(200000);
       int frameType;
+      uint64_t PTS;
 
-      SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0;
+      SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0, PTS_bytes_read = 0;
 
       h264_stream_t *h = h264_new();
 
@@ -82,23 +87,27 @@ int main(int argc, char *argv[])
       uint8_t *modified_data = nullptr;
 
       while (b) {
-        if (ReadProcessMemory(hProc, (LPVOID) (sizePtr), &size, 4, &size_bytes_read)
+        if (ReadProcessMemory(hProc, (LPVOID) sizePtr, &size, 4, &size_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
           if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
         }
 
         if (size > 0) {
-          if (ReadProcessMemory(hProc, (LPVOID) (dataPtr), data, size, &data_bytes_read)
+          if (ReadProcessMemory(hProc, (LPVOID) dataPtr, data, size, &data_bytes_read)
               || GetLastError() == ERROR_PARTIAL_COPY) {
             if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
           }
         }
 
-        if (ReadProcessMemory(hProc, (LPVOID) (dataTypePtr), &frameType, 4, &frame_type_bytes_read)
+        if (ReadProcessMemory(hProc, (LPVOID) dataTypePtr, &frameType, 4, &frame_type_bytes_read)
             || GetLastError() == ERROR_PARTIAL_COPY) {
-          if (frame_type_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
+          if (frame_type_bytes_read == 0) std::cerr << "Cannot read frame_type_bytes_read" << std::endl;
         }
 
+        if (ReadProcessMemory(hProc, (LPVOID) PTSPtr, &PTS, sizeof(uint64_t), &PTS_bytes_read)
+            || GetLastError() == ERROR_PARTIAL_COPY) {
+          if (PTS_bytes_read == 0) std::cerr << "Cannot read PTS_bytes_read" << std::endl;
+        }
         if (frameType == -1) continue;
 
         if (size > 0) {
@@ -153,7 +162,7 @@ int main(int argc, char *argv[])
           }
 
           bool tmp = false;
-            pDecoder->readFrame(data, size, tmp);
+          pDecoder->readFrame(data, size, tmp);
 //            int tmpSize = modifiedDataSize + size;
 //
 //            auto *combined = new unsigned char[tmpSize];
