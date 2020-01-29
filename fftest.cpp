@@ -10,6 +10,12 @@
 #include <algorithm>
 #include "h264-bitstream/h264_stream.h"
 #include "H264_Decoder.h"
+#include "h264_data.h"
+#include <boost/interprocess/ipc/message_queue.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <cstring>
+
+using namespace boost::interprocess;
 
 extern "C"
 {
@@ -37,39 +43,42 @@ extern "C"
 int main(int argc, char *argv[])
 {
 
-  std::ifstream infile(
-      "C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\pointers.txt"); //TODO: gowno ebanoe
+//  std::ifstream infile(
+//      "D:\\Development\\CPP\\RPiPlay\\cmake-build-debug\\pointers.txt"); //TODO: gowno ebanoe
+//
+//  std::string sizePtrStr;
+//  std::string dataPtrStr;
+//  std::string dataTypePtrStr;
+//  std::string sharedPTSStr;
+//  std::getline(infile, sizePtrStr);
+//  std::getline(infile, dataPtrStr);
+//  std::getline(infile, dataTypePtrStr);
+//  std::getline(infile, sharedPTSStr);
+//
+//  int *sizePtr = char_to_pointer(sizePtrStr);
+//  int *dataPtr = char_to_pointer(dataPtrStr);
+//  int *dataTypePtr = char_to_pointer(dataTypePtrStr);
+//  int *PTSPtr = char_to_pointer(sharedPTSStr);
 
-  std::string sizePtrStr;
-  std::string dataPtrStr;
-  std::string dataTypePtrStr;
-  std::string sharedPTSStr;
-  std::getline(infile, sizePtrStr);
-  std::getline(infile, dataPtrStr);
-  std::getline(infile, dataTypePtrStr);
-  std::getline(infile, sharedPTSStr);
+  message_queue frames_queue
+      (
+          open_only,
+          "frames_queue"
+      );
+  message_queue::size_type recvd_size;
+  unsigned int priority;
+  std::string serialized_string;
+  serialized_string.resize(MAX_SIZE);
 
-  int *sizePtr = char_to_pointer(sizePtrStr);
-  int *dataPtr = char_to_pointer(dataPtrStr);
-  int *dataTypePtr = char_to_pointer(dataTypePtrStr);
-  int *PTSPtr = char_to_pointer(sharedPTSStr);
+  h264_data frame_data;
 
   bool b = true;
   const std::string entryName = "rpiplay.exe";
 
   auto *pDecoder = new H264_Decoder(render, nullptr);
 
-  HWND hWnd = FindWindow(0, TEXT("C:\\Users\\aelmod\\CLionProjects\\RPiPlay\\cmake-build-release\\rpiplay.exe"));
-  if (hWnd == 0) {
-    std::cerr << "Cannot find window." << std::endl;
-  } else {
-    DWORD pId;
-    GetWindowThreadProcessId(hWnd, &pId);
-    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pId);
-
-    if (hProc) {
       int size = -1;
-      auto *data = (uint8_t *) malloc(200000);
+      auto *data = (uint8_t *) malloc(MAX_SIZE);
       int frameType;
       uint64_t PTS;
 
@@ -87,27 +96,43 @@ int main(int argc, char *argv[])
       uint8_t *modified_data = nullptr;
 
       while (b) {
-        if (ReadProcessMemory(hProc, (LPVOID) sizePtr, &size, 4, &size_bytes_read)
-            || GetLastError() == ERROR_PARTIAL_COPY) {
-          if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
-        }
 
-        if (size > 0) {
-          if (ReadProcessMemory(hProc, (LPVOID) dataPtr, data, size, &data_bytes_read)
-              || GetLastError() == ERROR_PARTIAL_COPY) {
-            if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
-          }
-        }
+        frames_queue.receive(&serialized_string[0], MAX_SIZE, recvd_size, priority);
 
-        if (ReadProcessMemory(hProc, (LPVOID) dataTypePtr, &frameType, 4, &frame_type_bytes_read)
-            || GetLastError() == ERROR_PARTIAL_COPY) {
-          if (frame_type_bytes_read == 0) std::cerr << "Cannot read frame_type_bytes_read" << std::endl;
-        }
+        std::stringstream iss;
+        iss << serialized_string;
 
-        if (ReadProcessMemory(hProc, (LPVOID) PTSPtr, &PTS, sizeof(uint64_t), &PTS_bytes_read)
-            || GetLastError() == ERROR_PARTIAL_COPY) {
-          if (PTS_bytes_read == 0) std::cerr << "Cannot read PTS_bytes_read" << std::endl;
-        }
+        boost::archive::text_iarchive ia(iss);
+        ia >> frame_data;
+
+        size = frame_data.data_len;
+        data = (unsigned char*)frame_data.data.c_str();
+        frameType = frame_data.type;
+        PTS = frame_data.pts;
+
+
+
+//        if (ReadProcessMemory(hProc, (LPVOID) sizePtr, &size, 4, &size_bytes_read)
+//            || GetLastError() == ERROR_PARTIAL_COPY) {
+//          if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
+//        }
+//
+//        if (size > 0) {
+//          if (ReadProcessMemory(hProc, (LPVOID) dataPtr, data, size, &data_bytes_read)
+//              || GetLastError() == ERROR_PARTIAL_COPY) {
+//            if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
+//          }
+//        }
+//
+//        if (ReadProcessMemory(hProc, (LPVOID) dataTypePtr, &frameType, 4, &frame_type_bytes_read)
+//            || GetLastError() == ERROR_PARTIAL_COPY) {
+//          if (frame_type_bytes_read == 0) std::cerr << "Cannot read frame_type_bytes_read" << std::endl;
+//        }
+//
+//        if (ReadProcessMemory(hProc, (LPVOID) PTSPtr, &PTS, sizeof(uint64_t), &PTS_bytes_read)
+//            || GetLastError() == ERROR_PARTIAL_COPY) {
+//          if (PTS_bytes_read == 0) std::cerr << "Cannot read PTS_bytes_read" << std::endl;
+//        }
         if (frameType == -1) continue;
 
         if (size > 0) {
@@ -177,14 +202,12 @@ int main(int argc, char *argv[])
           Sleep(17);
         }
       }
-    } else {
-      std::cerr << "Couldn't open process " << pId << ": " << GetLastError() << std::endl;
-    }
+
 
     std::getchar();
 
     b = false;
-  }
+
   return 0;
 }
 
