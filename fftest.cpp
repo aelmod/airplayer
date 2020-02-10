@@ -13,6 +13,7 @@
 #include "h264_data.h"
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/archive/text_iarchive.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
 #include <cstring>
 
 using namespace boost::interprocess;
@@ -30,18 +31,17 @@ extern "C"
 };
 
 void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx);
+
 void sdlInit(AVCodecContext *pCodecCtx);
 
-int *char_to_pointer(std::string input)
-{
+int *char_to_pointer(std::string input) {
   return (int *) std::stoul(input, nullptr, 16);
 }
 
 #ifdef __cplusplus
 extern "C"
 #endif
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 
   message_queue frames_queue
       (
@@ -61,95 +61,99 @@ int main(int argc, char *argv[])
 
   auto *pDecoder = new H264_Decoder(render, nullptr);
 
-      int size = -1;
-      auto *data = (uint8_t *) malloc(MAX_SIZE);
-      int frameType;
-      uint64_t PTS;
+  int size = -1;
+  auto *data = (uint8_t *) malloc(MAX_SIZE);
+  int frameType;
+  uint64_t PTS;
 
-      SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0, PTS_bytes_read = 0;
+  SIZE_T size_bytes_read = 0, data_bytes_read = 0, frame_type_bytes_read = 0, PTS_bytes_read = 0;
 
-      h264_stream_t *h = h264_new();
+  h264_stream_t *h = h264_new();
 
-      if (!h) std::cerr << "PEZDA!" << std::endl;
+  if (!h) std::cerr << "PEZDA!" << std::endl;
 
-      pDecoder->load(60);
+  pDecoder->load(60);
 
-      bool secondFrame = true;
+  bool secondFrame = true;
 
-      int modifiedDataSize = 0;
-      uint8_t *modified_data = nullptr;
+  using FirstFrame = std::pair<std::string, int>;
+  managed_shared_memory segment(open_only, "FirstFrameSharedMemory");
+  std::pair<FirstFrame *, managed_shared_memory::size_type> res;
 
-      while (b) {
+  while (0 == res.second) {
+    res = segment.find<FirstFrame>("FirstFrame instance");
+  }
 
-        frames_queue.receive(&serialized_string[0], MAX_SIZE, recvd_size, priority);
-        std::cout << "Test";
-        std::stringstream iss;
-        iss << serialized_string;
+  size = res.first->second;
+  std::copy(res.first->first.begin(), res.first->first.end(), data);
 
-        boost::archive::text_iarchive ia(iss);
-        ia >> frame_data;
+  int modifiedDataSize = 0;
+  auto *modified_data = new uint8_t[size * 2];
 
-        size = frame_data.data_len;
-        std::copy(frame_data.data.begin(), frame_data.data.end(), data);
-        frameType = frame_data.type;
-        PTS = frame_data.pts;
+  int sps_start, sps_end;
+
+  int sps_size = find_nal_unit(data, size, &sps_start, &sps_end);
+  int pps_size = size - 8 - sps_size;
+  if (sps_size > 0) {
+    read_nal_unit(h, &data[sps_start], sps_size);
+    h->sps->vui.bitstream_restriction_flag = 1;
+    h->sps->vui.max_dec_frame_buffering = 4; // It seems this is the lowest value that works for iOS and macOS
+
+    // Write the modified SPS NAL
+    int new_sps_size = write_nal_unit(h, modified_data + 3, size * 2) - 1;
+    modified_data[0] = 0;
+    modified_data[1] = 0;
+    modified_data[2] = 0;
+    modified_data[3] = 1;
+
+    // Copy the original PPS NAL
+    memcpy(modified_data + new_sps_size + 4, data + 4 + sps_size, pps_size + 4);
+
+    size = new_sps_size + pps_size + 8;
+    modifiedDataSize = size;
+    memcpy(modified_data, data, size);
+  }
+
+  while (b) {
+
+    frames_queue.receive(&serialized_string[0], MAX_SIZE, recvd_size, priority);
+    std::cout << "Test";
+    std::stringstream iss;
+    iss << serialized_string;
+
+    boost::archive::text_iarchive ia(iss);
+    ia >> frame_data;
+
+    size = frame_data.data_len;
+    std::copy(frame_data.data.begin(), frame_data.data.end(), data);
+    frameType = frame_data.type;
+    PTS = frame_data.pts;
 
 
-        if (frameType == -1) continue;
+    if (frameType == -1) continue;
 
-        if (size > 0) {
-          if (frameType == 0) {
-            modified_data = new uint8_t[size * 2];
+    if (data && size > 0) {
+      if (secondFrame) {
+        int tmpSize = modifiedDataSize + size;
 
-            int sps_start, sps_end;
+        auto *combined = new unsigned char[tmpSize];
 
-            int sps_size = find_nal_unit(data, size, &sps_start, &sps_end);
-            int pps_size = size - 8 - sps_size;
-            if (sps_size > 0) {
-              read_nal_unit(h, &data[sps_start], sps_size);
-              h->sps->vui.bitstream_restriction_flag = 1;
-              h->sps->vui.max_dec_frame_buffering = 4; // It seems this is the lowest value that works for iOS and macOS
+        memcpy(combined, modified_data, modifiedDataSize);
+        memcpy(combined + modifiedDataSize, data, size);
 
-              // Write the modified SPS NAL
-              int new_sps_size = write_nal_unit(h, modified_data + 3, size * 2) - 1;
-              modified_data[0] = 0;
-              modified_data[1] = 0;
-              modified_data[2] = 0;
-              modified_data[3] = 1;
+        bool first_frame = true;
 
-              // Copy the original PPS NAL
-              memcpy(modified_data + new_sps_size + 4, data + 4 + sps_size, pps_size + 4);
+        pDecoder->readFrame(combined, tmpSize, first_frame);
+        sdlInit(pDecoder->codec_context);
 
-              size = new_sps_size + pps_size + 8;
-              modifiedDataSize = size;
-              memcpy(modified_data, data, size);
-              continue;
-            }
-          }
-        }
+        secondFrame = false;
+        first_frame = false;
 
-        if (data && size > 0) {
-          if (secondFrame) {
-            int tmpSize = modifiedDataSize + size;
+        continue;
+      }
 
-            auto *combined = new unsigned char[tmpSize];
-
-            memcpy(combined, modified_data, modifiedDataSize);
-            memcpy(combined + modifiedDataSize, data, size);
-
-            bool first_frame = true;
-
-            pDecoder->readFrame(combined, tmpSize, first_frame);
-            sdlInit(pDecoder->codec_context);
-
-            secondFrame = false;
-            first_frame = false;
-
-            continue;
-          }
-
-          bool tmp = false;
-          //pDecoder->readFrame(data, size, tmp);
+      bool tmp = false;
+      pDecoder->readFrame(data, size, tmp);
 //            int tmpSize = modifiedDataSize + size;
 //
 //            auto *combined = new unsigned char[tmpSize];
@@ -161,14 +165,14 @@ int main(int argc, char *argv[])
 //
 //          free(combined);
 
-          Sleep(17);
-        }
-      }
+      Sleep(17);
+    }
+  }
 
 
-    std::getchar();
+  std::getchar();
 
-    b = false;
+  b = false;
 
   return 0;
 }
@@ -179,8 +183,7 @@ struct SwsContext *sws_ctx;
 SDL_Renderer *sdlRenderer;
 SDL_Texture *sdlTexture;
 
-void sdlInit(AVCodecContext *pCodecCtx)
-{
+void sdlInit(AVCodecContext *pCodecCtx) {
   //Source color format
   AVPixelFormat src_fix_fmt = pCodecCtx->pix_fmt; //AV_PIX_FMT_YUV420P
   //Objective color format
@@ -245,8 +248,7 @@ void sdlInit(AVCodecContext *pCodecCtx)
   SDL_SetTextureBlendMode(sdlTexture, SDL_BLENDMODE_BLEND);
 }
 
-void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx)
-{
+void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx) {
   SDL_Event event;
 
   //render
