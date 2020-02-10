@@ -43,28 +43,12 @@ extern "C"
 int main(int argc, char *argv[])
 {
 
-//  std::ifstream infile(
-//      "D:\\Development\\CPP\\RPiPlay\\cmake-build-debug\\pointers.txt"); //TODO: gowno ebanoe
-//
-//  std::string sizePtrStr;
-//  std::string dataPtrStr;
-//  std::string dataTypePtrStr;
-//  std::string sharedPTSStr;
-//  std::getline(infile, sizePtrStr);
-//  std::getline(infile, dataPtrStr);
-//  std::getline(infile, dataTypePtrStr);
-//  std::getline(infile, sharedPTSStr);
-//
-//  int *sizePtr = char_to_pointer(sizePtrStr);
-//  int *dataPtr = char_to_pointer(dataPtrStr);
-//  int *dataTypePtr = char_to_pointer(dataTypePtrStr);
-//  int *PTSPtr = char_to_pointer(sharedPTSStr);
-
   message_queue frames_queue
       (
           open_only,
           "frames_queue"
       );
+
   message_queue::size_type recvd_size;
   unsigned int priority;
   std::string serialized_string;
@@ -98,7 +82,7 @@ int main(int argc, char *argv[])
       while (b) {
 
         frames_queue.receive(&serialized_string[0], MAX_SIZE, recvd_size, priority);
-
+        std::cout << "Test";
         std::stringstream iss;
         iss << serialized_string;
 
@@ -106,33 +90,11 @@ int main(int argc, char *argv[])
         ia >> frame_data;
 
         size = frame_data.data_len;
-        data = (unsigned char*)frame_data.data.c_str();
+        std::copy(frame_data.data.begin(), frame_data.data.end(), data);
         frameType = frame_data.type;
         PTS = frame_data.pts;
 
 
-
-//        if (ReadProcessMemory(hProc, (LPVOID) sizePtr, &size, 4, &size_bytes_read)
-//            || GetLastError() == ERROR_PARTIAL_COPY) {
-//          if (size_bytes_read == 0) std::cerr << "Cannot read size_bytes_read" << std::endl;
-//        }
-//
-//        if (size > 0) {
-//          if (ReadProcessMemory(hProc, (LPVOID) dataPtr, data, size, &data_bytes_read)
-//              || GetLastError() == ERROR_PARTIAL_COPY) {
-//            if (data_bytes_read == 0) std::cerr << "Cannot read data_bytes_read" << std::endl;
-//          }
-//        }
-//
-//        if (ReadProcessMemory(hProc, (LPVOID) dataTypePtr, &frameType, 4, &frame_type_bytes_read)
-//            || GetLastError() == ERROR_PARTIAL_COPY) {
-//          if (frame_type_bytes_read == 0) std::cerr << "Cannot read frame_type_bytes_read" << std::endl;
-//        }
-//
-//        if (ReadProcessMemory(hProc, (LPVOID) PTSPtr, &PTS, sizeof(uint64_t), &PTS_bytes_read)
-//            || GetLastError() == ERROR_PARTIAL_COPY) {
-//          if (PTS_bytes_read == 0) std::cerr << "Cannot read PTS_bytes_read" << std::endl;
-//        }
         if (frameType == -1) continue;
 
         if (size > 0) {
@@ -187,7 +149,7 @@ int main(int argc, char *argv[])
           }
 
           bool tmp = false;
-          pDecoder->readFrame(data, size, tmp);
+          //pDecoder->readFrame(data, size, tmp);
 //            int tmpSize = modifiedDataSize + size;
 //
 //            auto *combined = new unsigned char[tmpSize];
