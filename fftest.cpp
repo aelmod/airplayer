@@ -34,14 +34,22 @@ void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCt
 
 void sdlInit(AVCodecContext *pCodecCtx);
 
-int *char_to_pointer(std::string input) {
+int *char_to_pointer(std::string input)
+{
   return (int *) std::stoul(input, nullptr, 16);
 }
+
+struct structure {
+  int integer1;   //The compiler places this at offset 0 in the structure
+  offset_ptr<int> ptr;        //The compiler places this at offset 4 in the structure
+  int integer2;   //The compiler places this at offset 8 in the structure
+};
 
 #ifdef __cplusplus
 extern "C"
 #endif
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
   message_queue frames_queue
       (
@@ -76,16 +84,35 @@ int main(int argc, char *argv[]) {
 
   bool secondFrame = true;
 
-  using FirstFrame = std::pair<std::string, int>;
+  using FirstFrame = std::pair<int*, int>;
   managed_shared_memory segment(open_only, "FirstFrameSharedMemory");
-  std::pair<FirstFrame *, managed_shared_memory::size_type> res;
 
-  while (0 == res.second) {
-    res = segment.find<FirstFrame>("FirstFrame instance");
-  }
+  int* test = new int();
 
-  size = res.first->second;
-  std::copy(res.first->first.begin(), res.first->first.end(), data);
+//  memcpy(test, segment.get_address(), 4);
+//  std::pair<structure*, managed_shared_memory::size_type> res;
+//
+//  while (0 == res.second) {
+//    res = segment.find<structure>("FirstFrame instance");
+//  }
+
+  boost::interprocess::shared_memory_object shm
+      (boost::interprocess::open_only, "FOO"              //name
+          , boost::interprocess::read_only
+      );
+
+//  auto firstFrame = new FirstFrame();
+  boost::interprocess::mapped_region region(shm, boost::interprocess::read_only);
+//  firstFrame = (FirstFrame*)region.get_address();
+
+  auto ttt = *(int*)region.get_address();
+  auto ttt2 = *((int*)region.get_address() + sizeof(int*));
+
+  auto keke = 1;
+
+//  size = res.first->second;
+//  int *kek = res.first->first.get();
+//  std::copy(res.first->first.begin(), res.first->first.end(), data);
 
   int modifiedDataSize = 0;
   auto *modified_data = new uint8_t[size * 2];
@@ -183,7 +210,8 @@ struct SwsContext *sws_ctx;
 SDL_Renderer *sdlRenderer;
 SDL_Texture *sdlTexture;
 
-void sdlInit(AVCodecContext *pCodecCtx) {
+void sdlInit(AVCodecContext *pCodecCtx)
+{
   //Source color format
   AVPixelFormat src_fix_fmt = pCodecCtx->pix_fmt; //AV_PIX_FMT_YUV420P
   //Objective color format
@@ -248,7 +276,8 @@ void sdlInit(AVCodecContext *pCodecCtx) {
   SDL_SetTextureBlendMode(sdlTexture, SDL_BLENDMODE_BLEND);
 }
 
-void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx) {
+void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx)
+{
   SDL_Event event;
 
   //render
