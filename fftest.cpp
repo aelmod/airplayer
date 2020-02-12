@@ -34,8 +34,7 @@ void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCt
 
 void sdlInit(AVCodecContext *pCodecCtx);
 
-int *char_to_pointer(std::string input)
-{
+int *char_to_pointer(std::string input) {
   return (int *) std::stoul(input, nullptr, 16);
 }
 
@@ -48,8 +47,7 @@ struct structure {
 #ifdef __cplusplus
 extern "C"
 #endif
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 
   message_queue frames_queue
       (
@@ -84,33 +82,49 @@ int main(int argc, char *argv[])
 
   bool secondFrame = true;
 
-  using FirstFrame = std::pair<int*, int>;
+//  using FirstFrame = std::pair<int*, int>;
   managed_shared_memory segment(open_only, "FirstFrameSharedMemory");
 
-  int* test = new int();
+  int *test = new int();
 
 //  memcpy(test, segment.get_address(), 4);
 //  std::pair<structure*, managed_shared_memory::size_type> res;
 //
-//  while (0 == res.second) {
-//    res = segment.find<structure>("FirstFrame instance");
-//  }
+//  std::pair<unsigned char *,int> FirstFrame;
 
-  boost::interprocess::shared_memory_object shm
-      (boost::interprocess::open_only, "FOO"              //name
-          , boost::interprocess::read_only
-      );
+  struct FirstFrame {
+    unsigned char *data = nullptr;
+    int data_len = 0;
+  } firstFrame;
 
-//  auto firstFrame = new FirstFrame();
-  boost::interprocess::mapped_region region(shm, boost::interprocess::read_only);
-//  firstFrame = (FirstFrame*)region.get_address();
 
-  auto ttt = *(int*)region.get_address();
-  auto ttt2 = *((int*)region.get_address() + sizeof(int*));
+  while (0 == firstFrame.data || 0 == firstFrame.data_len) {
 
-  auto keke = 1;
+    firstFrame.data = *segment.find<unsigned char *>("FirstFrameData").first;
+    firstFrame.data_len = *segment.find<int>("FirstFrameDataLen").first;
 
-//  size = res.first->second;
+  }
+
+  data = firstFrame.data;
+  size = firstFrame.data_len;
+
+//  boost::interprocess::shared_memory_object shm
+//      (boost::interprocess::open_only, "FOO"              //name
+//          , boost::interprocess::read_only
+//      );
+//
+////  auto firstFrame = new FirstFrame();
+//  boost::interprocess::mapped_region region(shm, boost::interprocess::read_only);
+////  firstFrame = (FirstFrame*)region.get_address();
+//
+//  auto ttt = *(int*)region.get_address();
+//  auto ttt2 = *((int*)region.get_address() + sizeof(int*));
+//
+//  auto keke = 1;
+
+
+
+
 //  int *kek = res.first->first.get();
 //  std::copy(res.first->first.begin(), res.first->first.end(), data);
 
@@ -210,8 +224,7 @@ struct SwsContext *sws_ctx;
 SDL_Renderer *sdlRenderer;
 SDL_Texture *sdlTexture;
 
-void sdlInit(AVCodecContext *pCodecCtx)
-{
+void sdlInit(AVCodecContext *pCodecCtx) {
   //Source color format
   AVPixelFormat src_fix_fmt = pCodecCtx->pix_fmt; //AV_PIX_FMT_YUV420P
   //Objective color format
@@ -276,8 +289,7 @@ void sdlInit(AVCodecContext *pCodecCtx)
   SDL_SetTextureBlendMode(sdlTexture, SDL_BLENDMODE_BLEND);
 }
 
-void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx)
-{
+void render(AVFrame *pFrame, AVPacket *pkt, void *user, AVCodecContext *pCodecCtx) {
   SDL_Event event;
 
   //render
