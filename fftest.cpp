@@ -97,15 +97,11 @@ int main(int argc, char *argv[]) {
     int data_len = 0;
   } firstFrame;
 
-
-  while (0 == firstFrame.data || 0 == firstFrame.data_len) {
-
-    firstFrame.data = *segment.find<unsigned char *>("FirstFrameData").first;
-    firstFrame.data_len = *segment.find<int>("FirstFrameDataLen").first;
-
+  while (0 == firstFrame.data_len) {
+    firstFrame.data_len = segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first->second;
   }
 
-  data = firstFrame.data;
+  data = firstFrame.data = segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first->first;
   size = firstFrame.data_len;
 
 //  boost::interprocess::shared_memory_object shm
