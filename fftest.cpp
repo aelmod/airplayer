@@ -82,15 +82,21 @@ int main(int argc, char *argv[]) {
 
   bool secondFrame = true;
 
-//  using FirstFrame = std::pair<int*, int>;
-  managed_shared_memory segment(open_only, "FirstFrameSharedMemory");
-
-  int *test = new int();
-
-//  memcpy(test, segment.get_address(), 4);
-//  std::pair<structure*, managed_shared_memory::size_type> res;
-//
-//  std::pair<unsigned char *,int> FirstFrame;
+  //shared_memory_object::remove("FirstFrameSharedMemory");
+  managed_shared_memory segment;
+  bool sharedMemoryNotExists = true;
+  while (sharedMemoryNotExists) {
+    try {
+      managed_shared_memory segmentTry(open_only, "FirstFrameSharedMemory");
+      segment = std::move(segmentTry);
+    }
+    catch (interprocess_exception &ex) {
+      std::cout << "EXCEPTION: SHARED MEMORY DOES NOT EXISTS" << std::endl;
+      sharedMemoryNotExists = true;
+      continue;
+    }
+    sharedMemoryNotExists = false;
+  }
 
   struct FirstFrame {
     unsigned char *data = nullptr;
@@ -98,11 +104,17 @@ int main(int argc, char *argv[]) {
   } firstFrame;
 
   while (0 == firstFrame.data_len) {
-    firstFrame.data_len = segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first->second;
+    std::cout << "Waiting for first frame data transfer..." << std::endl;
+    if (0 != segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first) {
+      firstFrame.data_len = segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first->second;
+    }
   }
 
   data = firstFrame.data = segment.find<std::pair<unsigned char *, int>>("FirstFrameDataPair").first->first;
   size = firstFrame.data_len;
+  std::cout << "First frame data transfer successful!" << std::endl;
+  shared_memory_object::remove("FirstFrameSharedMemory");
+
 
 //  boost::interprocess::shared_memory_object shm
 //      (boost::interprocess::open_only, "FOO"              //name
